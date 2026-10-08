@@ -109,6 +109,36 @@ C'est le comportement attendu car :
 
 
 ## Partie 3
+### 3.1 & 3.2 — Sorties des commandes de validation
+Images construites (`docker images | grep -E 'movie-service|ticket-service'`) :
+```
+movie-service:1.0.0    c671c3c31896   331MB   95.2MB
+ticket-service:1.0.0   3182488e8485   331MB   95.2MB
+```
+
+Utilisateur non-root (`docker run --rm --entrypoint id movie-service:1.0.0`) :
+```
+uid=10001(spring) gid=101(spring) groups=101(spring)
+```
+
+Vérification Compose `whoami` (`curl -s localhost:8080/api/movies/whoami`) :
+```json
+{"environment":"compose","hostname":"275812a61979"}
+```
+
+Réservation Compose (`curl -s -X POST localhost:8082/api/tickets -H 'Content-Type: application/json' -d '{"movieId":1,"seats":2}' | jq`) :
+```json
+{
+  "id": 1,
+  "movieId": 1,
+  "movieTitle": "Pod Fiction",
+  "seats": 2,
+  "total": 21.00,
+  "createdAt": "2026-10-08T10:23:48.740866110Z"
+}
+```
+
+### 3.3 — Questions
 **Q3.1**
 On copie `pom.xml` en premier pour profiter du cache Docker. Les dépendances changent rarement, donc l'étape `dependency:go-offline` reste en cache. Si on modifie seulement une ligne de code Java dans `src/`, Docker réutilise ce cache et ne re-télécharge pas toutes les librairies, ce qui fait gagner plusieurs minutes par build.
 
@@ -159,6 +189,26 @@ C'est la `startupProbe` qui est en train de tourner. Ce n'est pas une anomalie :
 Les Pods passeraient en erreur `ErrImagePull` / `ImagePullBackOff`. Avec `Always`, Kubernetes tente systématiquement de télécharger l'image depuis un registre distant (Docker Hub). Comme nos images ont été créées localement et chargées dans Minikube sans être poussées sur un registre distant, le téléchargement échouerait.
 ## Partie 5
 ### 5.3 — Tests de l'Ingress
+Liste des films (`curl -s http://cinema.local/api/movies | jq '.[].title'`) :
+```
+"Pod Fiction"
+"Le Seigneur des Pods"
+"Docker Wars"
+"Rollback to the Future"
+```
+
+Création d'un ticket (`curl -s -X POST http://cinema.local/api/tickets -H 'Content-Type: application/json' -d '{"movieId":3,"seats":10}' | jq`) :
+```json
+{
+  "id": 2,
+  "movieId": 3,
+  "movieTitle": "Docker Wars",
+  "seats": 10,
+  "total": 90.00,
+  "createdAt": "2026-10-08T11:01:54.045860071Z"
+}
+```
+
 Boucle whoami (load-balancing) :
 ```
 movie-59684459f4-glxd7
@@ -225,6 +275,19 @@ HTTP/1.1 503 Service Temporarily Unavailable
 | 3 | `0/1 Running` (Readiness probe failed) | `kubectl describe pod -l app=ticket-debug` (section Events) | La `readinessProbe` teste le port 8081 alors que le service écoute sur 8080 | Remplacé `port: 8081` par `port: 8080` (ou `port: http`) |
 
 ### 6.3 — Changer la configuration sans rebuild
+Sorties des commandes :
+```bash
+curl -s http://cinema.local/api/movies/whoami
+# {"environment":"kubernetes","hostname":"movie-59684459f4-hht4z"}
+
+kubectl rollout restart deploy/movie
+kubectl rollout status deploy/movie
+# deployment "movie" successfully rolled out
+
+curl -s http://cinema.local/api/movies/whoami
+# {"environment":"production","hostname":"movie-855f59d9f9-nx4xs"}
+```
+
 **Q6.3**
 - *Pourquoi la modification n'a-t-elle pas été prise en compte immédiatement ?*
   Dans Kubernetes, les variables d'environnement injectées depuis une ConfigMap ne sont transmises au conteneur qu'à son démarrage. Modifier la ConfigMap ne modifie pas l'environnement des conteneurs déjà actifs en mémoire.
@@ -237,11 +300,25 @@ HTTP/1.1 503 Service Temporarily Unavailable
 3. **Réception** : La requête est acheminée jusqu'au conteneur du Pod `movie` désigné, qui la traite sur son port 8080.
 
 **Q7.2**
+Sorties successives de `curl -s http://cinema.local/api/tickets | jq length` :
+```
+Appel 1 : 1
+Appel 2 : 4
+Appel 3 : 1
+Appel 4 : 4
+```
 - *Variation du nombre* : Les tickets sont stockés dans une liste en mémoire vive propre à chaque instance Java de Pod `ticket`. Avec 2 réplicas et le load-balancing, chaque requête interroge un Pod différent qui ne possède qu'une partie des réservations.
 - *Suppression des Pods* : Toutes les réservations sont perdues car les conteneurs sont sans persistance et éphémères.
 - *Solution architecturale* : Rendre le microservice réellement stateless en déportant la persistance des données dans une base de données partagée (ex: PostgreSQL) adossée à du stockage persistant (PersistentVolume).
 
 **Q7.3**
+Sortie observée lors de la suppression (`kubectl delete pod ...` puis `kubectl get pods`) :
+```
+NAME                      READY   STATUS        RESTARTS   AGE
+movie-5b97fcfb88-mddkq    1/1     Terminating   0          12m
+movie-5b97fcfb88-vkbxd    1/1     Running       0          12m
+movie-5b97fcfb88-z8l2p    0/1     Running       0          2s
+```
 - *Constat* : Dès la suppression, un nouveau Pod `movie` est instantanément créé pour le remplacer.
 - *Perte sans Deployment* : Un Pod « nu » n'a aucun contrôleur de gestion d'état. S'il est supprimé ou s'il plante, il disparaît définitivement. Le `Deployment` garantit l'auto-guérison (self-healing), le maintien du nombre de réplicas et les mises à jour sans interruption de service.
 
