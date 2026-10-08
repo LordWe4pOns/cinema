@@ -1,0 +1,76 @@
+# TODO 1 : apiVersion d'un Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: movie
+  namespace: cinema-exam
+spec:
+  # TODO 2 : 2 réplicas
+  replicas: 2
+  selector:
+    matchLabels:
+      # TODO 3 : app: movie
+      app: movie
+  template:
+    metadata:
+      labels:
+        # TODO 3 (bis) : exactement le même label
+        app: movie
+    spec:
+      containers:
+        - name: movie
+          # TODO 4 : l'image chargée à l'étape 4.0
+          image: movie-service:1.0.0
+          # TODO 5 : ne jamais aller chercher l'image sur Internet si elle est déjà sur le nœud
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              # TODO 6 : le port d'écoute de Spring Boot
+              containerPort: 8080
+          # TODO 7 : injecter TOUTES les clés de la ConfigMap movie-config comme variables d'environnement
+          envFrom:
+            - configMapRef:
+                name: movie-config
+          # TODO 8 : requests = cpu 100m + memory 256Mi ; limits = memory 512Mi (pas de limite CPU)
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          # TODO 9 : startupProbe — GET /actuator/health/liveness, toutes les 2 s, 30 échecs maximum
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 2
+            failureThreshold: 30
+          # TODO 10 : livenessProbe — GET /actuator/health/liveness, toutes les 10 s
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 10
+          # TODO 11 : readinessProbe — GET /actuator/health/readiness, toutes les 5 s
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  # TODO 12 : ce nom DEVIENT le nom DNS (http://<nom>:8080) → cf. la valeur de MOVIE_URL
+  name: movie
+  namespace: cinema-exam
+spec:
+  # TODO 13 : sélectionner les Pods de movie
+  selector:
+    app: movie
+  ports:
+    # TODO 14 : le Service écoute sur 8080 et envoie vers le port NOMMÉ « http » du conteneur
+    - name: http
+      port: 8080
+      targetPort: http

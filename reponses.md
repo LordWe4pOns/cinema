@@ -118,7 +118,45 @@ On copie `pom.xml` en premier pour profiter du cache Docker. Les dépendances ch
 **Q3.3**
 Dans Kubernetes, les Pods démarrent de façon indépendante. Si `ticket` démarre avant `movie`, son conteneur tourne mais sa `readinessProbe` échoue (car elle n'arrive pas à joindre `movie`). Le Pod `ticket` reste simplement en `0/1 NotReady` et le Service ne lui envoie aucun trafic client tant que `movie` n'est pas opérationnel. Dès que `movie` est prêt, la probe de `ticket` passe au vert et le trafic arrive, sans redémarrer le conteneur.
 ## Partie 4
-…
+### 4.4 — Sorties des commandes
+`kubectl get pods` :
+```
+NAME                      READY   STATUS    RESTARTS   AGE
+movie-59684459f4-6rwd7    1/1     Running   0          50s
+movie-59684459f4-glxd7    1/1     Running   0          50s
+ticket-66d95c98b6-8fkcl   1/1     Running   0          50s
+ticket-66d95c98b6-jqp46   1/1     Running   0          50s
+```
+
+`kubectl get endpoints movie ticket` :
+```
+Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice
+NAME     ENDPOINTS                           AGE
+movie    10.244.0.36:8080,10.244.0.38:8080   70s
+ticket   10.244.0.37:8080,10.244.0.39:8080   70s
+```
+
+Réservation créée (via port-forward) :
+```json
+{
+  "id": 1,
+  "movieId": 2,
+  "movieTitle": "Le Seigneur des Pods",
+  "seats": 2,
+  "total": 24.00,
+  "createdAt": "2026-10-08T10:43:57.098362903Z"
+}
+```
+
+### 4.5 — Questions
+**Q4.1**
+`kubectl apply -f k8s/` lit et applique les fichiers dans l'ordre alphabétique. Les préfixes `00-`, `10-`, `20-` permettent de maîtriser l'ordre de création des ressources : on crée d'abord le Namespace (`00-`), ensuite les ConfigMaps (`10-`), puis les Deployments et Services (`20-`, `30-`) qui en ont besoin.
+
+**Q4.2**
+C'est la `startupProbe` qui est en train de tourner. Ce n'est pas une anomalie : Spring Boot a besoin de 15 à 30 secondes pour initialiser son contexte et démarrer Tomcat. Tant que la startupProbe n'a pas validé le démarrage, le Pod reste en `0/1` et la livenessProbe est mise en pause pour éviter de redémarrer le conteneur trop tôt.
+
+**Q4.3**
+Les Pods passeraient en erreur `ErrImagePull` / `ImagePullBackOff`. Avec `Always`, Kubernetes tente systématiquement de télécharger l'image depuis un registre distant (Docker Hub). Comme nos images ont été créées localement et chargées dans Minikube sans être poussées sur un registre distant, le téléchargement échouerait.
 ## Partie 5
 …
 ## Partie 6

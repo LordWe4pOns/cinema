@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: movie-config
+  namespace: cinema-exam
+data:
+  # TODO 3 : clé = NOM DE LA VARIABLE D'ENVIRONNEMENT, valeur = kubernetes
+  MOVIE_ENVIRONMENT: kubernetes
+---
+# TODO 4 : une seconde ConfigMap « ticket-config » (même namespace).
+# Elle doit fournir à ticket-service l'URL de movie-service : http://movie:8080
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ticket-config
+  namespace: cinema-exam
+data:
+  MOVIE_URL: http://movie:8080
