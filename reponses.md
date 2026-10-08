@@ -109,7 +109,14 @@ C'est le comportement attendu car :
 
 
 ## Partie 3
-…
+**Q3.1**
+On copie `pom.xml` en premier pour profiter du cache Docker. Les dépendances changent rarement, donc l'étape `dependency:go-offline` reste en cache. Si on modifie seulement une ligne de code Java dans `src/`, Docker réutilise ce cache et ne re-télécharge pas toutes les librairies, ce qui fait gagner plusieurs minutes par build.
+
+**Q3.2**
+`-Xmx512m` impose une valeur fixe en dur. Si on change la limite mémoire du conteneur (par exemple à 256Mo ou 1Go), la JVM ne s'adapte pas et risque de se faire tuer par l'OS (`OOMKilled`). Avec `-XX:MaxRAMPercentage=75`, la JVM s'adapte automatiquement à la mémoire allouée au conteneur (cgroups) en prenant 75% pour le tas (heap) et en laissant 25% pour le reste (threads, métadonnées, OS).
+
+**Q3.3**
+Dans Kubernetes, les Pods démarrent de façon indépendante. Si `ticket` démarre avant `movie`, son conteneur tourne mais sa `readinessProbe` échoue (car elle n'arrive pas à joindre `movie`). Le Pod `ticket` reste simplement en `0/1 NotReady` et le Service ne lui envoie aucun trafic client tant que `movie` n'est pas opérationnel. Dès que `movie` est prêt, la probe de `ticket` passe au vert et le trafic arrive, sans redémarrer le conteneur.
 ## Partie 4
 …
 ## Partie 5
