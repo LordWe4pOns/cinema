@@ -1,5 +1,12 @@
 # Examen CinéK8s — COSSAIS Simon
 
+Les tests peuvent être lancés avec le script :
+```
+chmod +x run-all.sh
+./run-all.sh
+```
+
+
 ## Partie 1
 **Q1.1**
 - Propriété Spring : `movie.url` (injectée via `@Value("${movie.url}")` dans `MovieClient`).
