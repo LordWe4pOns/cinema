@@ -158,7 +158,31 @@ C'est la `startupProbe` qui est en train de tourner. Ce n'est pas une anomalie :
 **Q4.3**
 Les Pods passeraient en erreur `ErrImagePull` / `ImagePullBackOff`. Avec `Always`, Kubernetes tente systématiquement de télécharger l'image depuis un registre distant (Docker Hub). Comme nos images ont été créées localement et chargées dans Minikube sans être poussées sur un registre distant, le téléchargement échouerait.
 ## Partie 5
-…
+### 5.3 — Tests de l'Ingress
+Boucle whoami (load-balancing) :
+```
+movie-59684459f4-glxd7
+movie-59684459f4-6rwd7
+movie-59684459f4-glxd7
+movie-59684459f4-glxd7
+movie-59684459f4-6rwd7
+movie-59684459f4-glxd7
+```
+
+Code HTTP pour `/actuator/health` :
+```
+404
+```
+
+### 5.4 — Questions
+**Q5.1**
+Les 2 Pods `movie` distincts répondent en alternance. C'est l'objet **Service** de Kubernetes (via kube-proxy et ses règles de routage iptables/IPVS) qui répartit la charge entre les différents Pods enregistrés dans ses Endpoints.
+
+**Q5.2**
+La requête renverrait une erreur **404 Not Found**. Avec `pathType: Exact`, l'Ingress ne transmet au Service que les requêtes dont l'URL est strictement `/api/movies`. Les sous-chemins comme `/api/movies/1` ne matcheraient plus la règle.
+
+**Q5.3**
+On obtient un code **404 Not Found**. C'est **tout à fait souhaitable** pour la sécurité : les endpoints Actuator sont purement techniques et internes (santé, métriques, éventuellement variables d'environnement). Ils n'ont pas vocation à être exposés publiquement à l'extérieur du cluster.
 ## Partie 6
 (tableau de dépannage, prédictions, explications)
 ## Partie 7
