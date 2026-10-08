@@ -7,6 +7,11 @@ metadata:
 spec:
   # TODO 2 : 2 réplicas
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       # TODO 3 : app: movie
@@ -23,6 +28,17 @@ spec:
           image: movie-service:1.0.0
           # TODO 5 : ne jamais aller chercher l'image sur Internet si elle est déjà sur le nœud
           imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           ports:
             - name: http
               # TODO 6 : le port d'écoute de Spring Boot
@@ -58,6 +74,9 @@ spec:
               path: /actuator/health/readiness
               port: http
             periodSeconds: 5
+      volumes:
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

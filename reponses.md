@@ -244,3 +244,32 @@ HTTP/1.1 503 Service Temporarily Unavailable
 **Q7.3**
 - *Constat* : Dès la suppression, un nouveau Pod `movie` est instantanément créé pour le remplacer.
 - *Perte sans Deployment* : Un Pod « nu » n'a aucun contrôleur de gestion d'état. S'il est supprimé ou s'il plante, il disparaît définitivement. Le `Deployment` garantit l'auto-guérison (self-healing), le maintien du nombre de réplicas et les mises à jour sans interruption de service.
+
+## ⭐ Bonus — Durcir et fiabiliser
+
+### ⭐ B1 — Durcir le Deployment movie
+Configuration ajoutée dans `20-movie.yaml` :
+- `securityContext` conteneur : `runAsNonRoot: true`, `runAsUser: 10001`, `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`, `capabilities.drop: ["ALL"]`.
+- Volume `emptyDir` monté sur `/tmp` pour permettre les écritures de fichiers temporaires nécessaires à Tomcat sans enfreindre le système de fichiers en lecture seule.
+
+Vérifications :
+- `kubectl exec deploy/movie -- id` : `uid=10001(spring) gid=101(spring) groups=101(spring)`
+- `kubectl exec deploy/movie -- touch /test` : `touch: cannot touch '/test': Read-only file system`
+- Les Pods restent parfaitement en `1/1 Running`.
+
+### ⭐ B2 — Rolling update sans coupure
+Configuration ajoutée dans `20-movie.yaml` :
+- `strategy.type: RollingUpdate` avec `maxUnavailable: 0` et `maxSurge: 1`.
+
+Sortie du test pendant `kubectl rollout restart deploy/movie` :
+```
+    300 200
+```
+(100 % de requêtes avec code HTTP 200, aucune erreur 502/503).
+
+**QB2**
+- **Résultat** : Zéro coupure de service (100 % des requêtes aboutissent avec succès).
+- **Rôle des 3 éléments** :
+  1. `strategy (RollingUpdate, maxUnavailable: 0, maxSurge: 1)` : Interdit à Kubernetes d'arrêter un Pod tant qu'un nouveau Pod n'a pas été déployé et validé (il y a toujours au minimum 2 Pods disponibles).
+  2. `readinessProbe` : Empêche Kubernetes d'envoyer du trafic sur un nouveau Pod tant qu'il n'est pas totalement démarré (évite les erreurs 502/503 au démarrage).
+  3. `shutdown: graceful` (Spring Boot) : Permet à l'ancien Pod qui va être détruit d'attendre la fin du traitement des requêtes HTTP en cours avant de stopper son conteneur (évite de couper brutalement une requête cliente).
