@@ -230,4 +230,17 @@ HTTP/1.1 503 Service Temporarily Unavailable
   Dans Kubernetes, les variables d'environnement injectées depuis une ConfigMap ne sont transmises au conteneur qu'à son démarrage. Modifier la ConfigMap ne modifie pas l'environnement des conteneurs déjà actifs en mémoire.
 - *Qu'est-ce qui l'a rendue effective ?*
   La commande `kubectl rollout restart deploy/movie` a déclenché le remplacement progressif des Pods (rolling update). Les nouveaux Pods démarrés ont ainsi lu la nouvelle version de la ConfigMap au lancement.
-…
+## Partie 7
+**Q7.1**
+1. **Résolution DNS** : CoreDNS (le DNS interne du cluster) résout le nom court `movie` vers la ClusterIP virtuelle du Service `movie`.
+2. **Routage et Load-balancing** : Les règles iptables/IPVS gérées par `kube-proxy` interceptent le trafic vers cette ClusterIP et sélectionnent aléatoirement l'un des Pods `movie` sains enregistrés dans les Endpoints.
+3. **Réception** : La requête est acheminée jusqu'au conteneur du Pod `movie` désigné, qui la traite sur son port 8080.
+
+**Q7.2**
+- *Variation du nombre* : Les tickets sont stockés dans une liste en mémoire vive propre à chaque instance Java de Pod `ticket`. Avec 2 réplicas et le load-balancing, chaque requête interroge un Pod différent qui ne possède qu'une partie des réservations.
+- *Suppression des Pods* : Toutes les réservations sont perdues car les conteneurs sont sans persistance et éphémères.
+- *Solution architecturale* : Rendre le microservice réellement stateless en déportant la persistance des données dans une base de données partagée (ex: PostgreSQL) adossée à du stockage persistant (PersistentVolume).
+
+**Q7.3**
+- *Constat* : Dès la suppression, un nouveau Pod `movie` est instantanément créé pour le remplacer.
+- *Perte sans Deployment* : Un Pod « nu » n'a aucun contrôleur de gestion d'état. S'il est supprimé ou s'il plante, il disparaît définitivement. Le `Deployment` garantit l'auto-guérison (self-healing), le maintien du nombre de réplicas et les mises à jour sans interruption de service.
