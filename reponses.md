@@ -184,6 +184,50 @@ La requête renverrait une erreur **404 Not Found**. Avec `pathType: Exact`, l'I
 **Q5.3**
 On obtient un code **404 Not Found**. C'est **tout à fait souhaitable** pour la sécurité : les endpoints Actuator sont purement techniques et internes (santé, métriques, éventuellement variables d'environnement). Ils n'ont pas vocation à être exposés publiquement à l'extérieur du cluster.
 ## Partie 6
-(tableau de dépannage, prédictions, explications)
-## Partie 7
+### 6.1 — Le service movie disparaît
+#### Prédictions avant test :
+- (a) `READY` et `RESTARTS` des Pods `ticket` après 30 s : `0/1` et `0` restart.
+- (b) Contenu de `kubectl get endpoints ticket` : aucun endpoint (`<none>`).
+- (c) Code HTTP de `GET http://cinema.local/api/tickets` : `503 Service Temporarily Unavailable` (généré par l'Ingress).
+- (d) Statut de la liveness de `ticket` : `UP`.
+
+#### Observations :
+`kubectl get pods` :
+```
+NAME                      READY   STATUS    RESTARTS   AGE
+ticket-66d95c98b6-8fkcl   0/1     Running   0          25m
+ticket-66d95c98b6-jqp46   0/1     Running   0          25m
+```
+
+`kubectl get endpoints ticket` :
+```
+NAME     ENDPOINTS   AGE
+ticket               25m
+```
+
+`curl -si http://cinema.local/api/tickets | head -1` :
+```
+HTTP/1.1 503 Service Temporarily Unavailable
+```
+
+#### Explication Q6.1 :
+**En 4 étapes :**
+1. Le scale à 0 supprime tous les Pods `movie` et vide les endpoints du Service `movie`.
+2. La `readinessProbe` de chaque Pod `ticket` (exécutée toutes les 5 s via `MovieHealthIndicator`) tente de joindre `movie-service` et échoue.
+3. Après 3 échecs consécutifs, le kubelet marque les Pods `ticket` comme non prêts (`0/1 NotReady`), et le contrôleur Kubernetes retire leurs adresses IP des Endpoints du Service `ticket`.
+4. Lorsque l'Ingress Nginx reçoit une requête pour `/api/tickets`, il constate que le Service `ticket` n'a aucun backend sain disponible et renvoie une erreur HTTP `503`.
+
+### 6.2 — Mission dépannage
+| # | Statut observé | Commande de diagnostic | Cause exacte | Correction apportée |
+|---|----------------|------------------------|--------------|---------------------|
+| 1 | `ImagePullBackOff` / `ErrImagePull` | `kubectl describe pod -l app=ticket-debug` (section Events) | `imagePullPolicy: Always` force le téléchargement depuis Docker Hub où l'image n'est pas publiée | Remplacé par `imagePullPolicy: IfNotPresent` |
+| 2 | `CreateContainerConfigError` | `kubectl describe pod -l app=ticket-debug` (section Events) | La ConfigMap référencée `ticket-configmap` n'existe pas dans le cluster | Corrigé par le nom réel `ticket-config` |
+| 3 | `0/1 Running` (Readiness probe failed) | `kubectl describe pod -l app=ticket-debug` (section Events) | La `readinessProbe` teste le port 8081 alors que le service écoute sur 8080 | Remplacé `port: 8081` par `port: 8080` (ou `port: http`) |
+
+### 6.3 — Changer la configuration sans rebuild
+**Q6.3**
+- *Pourquoi la modification n'a-t-elle pas été prise en compte immédiatement ?*
+  Dans Kubernetes, les variables d'environnement injectées depuis une ConfigMap ne sont transmises au conteneur qu'à son démarrage. Modifier la ConfigMap ne modifie pas l'environnement des conteneurs déjà actifs en mémoire.
+- *Qu'est-ce qui l'a rendue effective ?*
+  La commande `kubectl rollout restart deploy/movie` a déclenché le remplacement progressif des Pods (rolling update). Les nouveaux Pods démarrés ont ainsi lu la nouvelle version de la ConfigMap au lancement.
 …

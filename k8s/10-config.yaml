@@ -5,7 +5,7 @@ metadata:
   namespace: cinema-exam
 data:
   # TODO 3 : clé = NOM DE LA VARIABLE D'ENVIRONNEMENT, valeur = kubernetes
-  MOVIE_ENVIRONMENT: kubernetes
+  MOVIE_ENVIRONMENT: production
 ---
 # TODO 4 : une seconde ConfigMap « ticket-config » (même namespace).
 # Elle doit fournir à ticket-service l'URL de movie-service : http://movie:8080
